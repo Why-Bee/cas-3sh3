@@ -1,7 +1,7 @@
 /**
  * Lab 1 - seconds kernel module - outputs the number of seconds since the module is loaded
  * Group 12
- * Yash Bhatia -
+ * Yash Bhatia - 400362372
  * Khawja Labib - 400356836
  * 30th January 2026
  */
