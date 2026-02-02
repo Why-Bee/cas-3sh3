@@ -12,11 +12,26 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/sched.h>
 
+/* Print the PCB information for 'init': used in Simple Init */
+void print_init_pcb(void)
+{
+	struct task_struct *temp = &init_task; //get the init task
+	
+	printk(KERN_INFO "init_task pid:%d\n", temp->pid);
+
+	printk(KERN_INFO "init_task flags:%d\n", temp->flags);
+	printk(KERN_INFO "init_task runtime priority:%d\n", temp->rt_priority);
+	printk(KERN_INFO "init_task process policy:%d\n", temp->policy);
+	printk(KERN_INFO "init_task task group id:%d\n", temp->tgid);
+
+}
 /* This function is called when the module is loaded. */
 static int simple_init(void)
 {
        printk(KERN_INFO "Loading Module\n");
+	print_init_pcb();
 
        return 0;
 }
