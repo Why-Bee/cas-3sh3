@@ -103,6 +103,10 @@ int getStudentCount() {
     int n;
     printf("Enter the number of students: ");
     scanf("%d", &n);
+    if (n <= 0) {
+        printf("Number of students must be greater than 0. Exiting.\n");
+        exit(1);
+    }
     return n;
 }
 
