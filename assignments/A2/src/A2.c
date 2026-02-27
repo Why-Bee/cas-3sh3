@@ -12,6 +12,7 @@ Date: 2026-02-25
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
+#include <stdbool.h>
 #include <time.h>
 
 /*-----DEFINES------*/
@@ -21,6 +22,7 @@ Date: 2026-02-25
 #define MIN_PROG 3
 #define MAX_HELP 5
 #define MIN_HELP 1
+#define END_PROG 60 // Time a student spends programming before the simulation ends
 
 typedef enum {
     PROGRAMMING,
@@ -39,6 +41,7 @@ void ta_thread(void *arg);
 sem_t student_waiting; // Semaphore to see if a student is waiting
 sem_t ta_helping; // Semaphore to indicate TA is helping a student
 pthread_mutex_t queue_mutex; // Mutex for accessing the hallway queue
+pthread_mutex_t working_mutex; // Mutex for accessing the count of students working
 
 // Custom circular queue
 // This queue has 1 position for the student being helped and NUM_CHAIRS positions for the students waiting in the hallway. 
@@ -86,6 +89,7 @@ int isQueueFull(HallwayQueue *q) {
 }
 
 HallwayQueue hallway;
+bool shutdown_ta_signal = false; // Signal to indicate when the TA should shut down after all students are done programming
 
 /*-----CODE---------*/
 
@@ -113,6 +117,15 @@ void ta_thread(void *arg) {
                 break;
             }
             case HELPING: {
+                // First, check if the shutdown was asserted by the student.
+                pthread_mutex_lock(&working_mutex);
+                if (shutdown_ta_signal) {
+                    pthread_mutex_unlock(&working_mutex);
+                    printf("TA is shutting down as all students are done programming.\n");
+                    return; // Exit the thread
+                }
+                pthread_mutex_unlock(&working_mutex); // in case the shutdown signal was not asserted, continue with helping the student
+
                 // Simulate helping a student
                 // Step 1: Get the next student from the hallway queue
                 pthread_mutex_lock(&queue_mutex);
@@ -153,6 +166,7 @@ void ta_thread(void *arg) {
 
 void student_thread(void *arg) {
     int student_id = *((int *)arg);
+    int programming_done = 0;
     free(arg); // Free the allocated memory for student ID
 
     StudentState state = PROGRAMMING;
@@ -161,7 +175,13 @@ void student_thread(void *arg) {
         switch (state) {
             case PROGRAMMING: {
                 printf("Student %d is programming.\n", student_id);
-                sleep(rand() % (MAX_PROG - MIN_PROG + 1) + MIN_PROG); // Simulate programming time
+                int programming_time = rand() % (MAX_PROG - MIN_PROG + 1) + MIN_PROG;
+                sleep(programming_time); // Simulate programming time
+                programming_done += programming_time;
+                if (programming_done >= END_PROG) {
+                    printf("Student %d has finished programming and leaves the simulation.\n", student_id);
+                    return; // Exit the thread
+                }
                 printf("Student %d needs help and goes to the hallway.\n", student_id);
                 state = WAITING;
                 break;
@@ -170,10 +190,6 @@ void student_thread(void *arg) {
                 pthread_mutex_lock(&queue_mutex);
                 if (!isQueueFull(&hallway)) { // There is room in the queue
                     pushToQueue(&hallway, student_id); // Join the hallway queue
-                    // printf("Student %d is waiting in the hallway. Queue count: %d\n", student_id, hallway.count);
-                    // pthread_mutex_unlock(&queue_mutex);
-                    // sem_post(&student_waiting); // Signal that a student is waiting
-                    // state = BEING_HELPED; // Wait to be helped
 
                     // Although the student is "in hallway", there is a case where they need to just wake up the TA without waiting.
                     // As the TA implementation always pulls from the queue, we can pretend that the queue was not joined
@@ -219,6 +235,7 @@ int main() {
     sem_init(&ta_helping, 0, 0);
     // Initialize mutex
     pthread_mutex_init(&queue_mutex, NULL);
+    pthread_mutex_init(&working_mutex, NULL);
 
     // Create TA thread
     pthread_t ta;
@@ -235,7 +252,9 @@ int main() {
     // TODO simulation end condition
     for (int i = 0; i < n; i++) {
         pthread_join(students[i], NULL);
-        free(students[i]);
     }
+    sem_post(&student_waiting); // In case the TA is sleeping, wake it up to check the shutdown signal
+    shutdown_ta_signal = true; // Signal the TA to shut down after all students are done programming
+    // When the last student finishes programming, the TA will be signaled to shut down and will exit its thread, so we can join it here.
     pthread_join(ta, NULL);
 }
