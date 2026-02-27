@@ -5,6 +5,11 @@ Author: Yash Bhatia - bhatiy1 - 400362372
 Author: Khawja Labib - labibk - 400356836
 
 Date: 2026-02-25
+
+Run instructions:
+
+1. make
+2. make run
 */
 
 #include <stdio.h>
@@ -36,7 +41,7 @@ typedef enum {
 } TAState;
 
 void student_thread(void *arg);
-void ta_thread(void *arg);
+void ta_thread();
 
 sem_t student_waiting; // Semaphore to see if a student is waiting
 sem_t ta_helping; // Semaphore to indicate TA is helping a student
@@ -103,7 +108,7 @@ int getStudentCount() {
 
 // TA thread function
 
-void ta_thread(void *arg) {
+void ta_thread() {
     // State machine
     TAState state = SLEEPING;
 
