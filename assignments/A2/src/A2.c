@@ -21,9 +21,9 @@ Run instructions:
 #include <time.h>
 
 /*-----DEFINES------*/
-#define NUM_CHAIRS 3
+#define NUM_CHAIRS 3 // Given by the assignment
 
-#define MAX_PROG 10
+#define MAX_PROG 10 // Random values, chosen to simulate the programming time and helping time.
 #define MIN_PROG 3
 #define MAX_HELP 5
 #define MIN_HELP 1
@@ -33,12 +33,12 @@ typedef enum {
     PROGRAMMING,
     WAITING,
     BEING_HELPED
-} StudentState;
+} StudentState; // Student "state machine"
 
 typedef enum {
     SLEEPING,
     HELPING
-} TAState;
+} TAState; // TA "state machine"
 
 void student_thread(void *arg);
 void ta_thread();
@@ -47,6 +47,8 @@ sem_t student_waiting; // Semaphore to see if a student is waiting
 sem_t ta_helping; // Semaphore to indicate TA is helping a student
 pthread_mutex_t queue_mutex; // Mutex for accessing the hallway queue
 pthread_mutex_t working_mutex; // Mutex for accessing the count of students working
+
+/*---------------QUEUE IMPLEMENTATION-----------------*/
 
 // Custom circular queue
 // This queue has 1 position for the student being helped and NUM_CHAIRS positions for the students waiting in the hallway. 
@@ -96,7 +98,7 @@ int isQueueFull(HallwayQueue *q) {
 HallwayQueue hallway;
 bool shutdown_ta_signal = false; // Signal to indicate when the TA should shut down after all students are done programming
 
-/*-----CODE---------*/
+/*----------CODE---------*/
 
 // Function to get the number of students from user input
 int getStudentCount() {
@@ -110,8 +112,18 @@ int getStudentCount() {
     return n;
 }
 
-// TA thread function
+/*
+TA thread function.
 
+This function emulates a state machine.
+- TA begins as sleeping and will wait on the student_waiting semaphore until a signal is given.
+- When a student arrives, they will wake the TA and transition to helping
+- The TA will generate a random helping time and help the student at the front of the queue
+- They will make a student wait on the ta_helping semaphore until the TA is done helping them
+- After helping a student, they will check for more students to help. If yes, the TA will remain in the state
+- If no, the TA will go back to sleep and wait for the next student to arrive
+- If the shutdown signal is asserted, the TA will exit the thread and end the simulation
+*/
 void ta_thread() {
     // State machine
     TAState state = SLEEPING;
@@ -173,6 +185,20 @@ void ta_thread() {
     }
 }
 
+/*
+Student thread function.
+
+This function emulates a state machine.
+- Student begins in the programming state and will simulate programming for a random amount of time
+- After programming, the student will check if they have reached the end of their programming time.
+- If they have, they will exit the thread and end the simulation for that student
+- If they have not, they will transition to the waiting state and check if there is room in the hallway queue
+- If there is room, they will join the queue and wake the TA if they are the first student in the queue
+- If there is no room, they will go back to programming and repeat the cycle
+- If the student is waiting in the hallway, they will wait on the ta_helping semaphore until the TA is done helping them.
+- After getting help, they will go back to programming and repeat the cycle until they have reached the end of their programming time
+*/
+
 void student_thread(void *arg) {
     int student_id = *((int *)arg);
     int programming_done = 0;
@@ -229,8 +255,16 @@ void student_thread(void *arg) {
     }
 }
 
+/*
+Main function.
+
+- Initializes all necessary data structures, semaphores, and mutexes
+- Creates the TA thread and student threads
+- Waits for all student threads to finish before signaling the TA to shut down and waiting for the TA thread to finish before ending the simulation
+*/
+
 int main() {
-    srand(time(NULL));
+    srand(time(NULL)); // Seed the random number generator with the current time
 
     // Accept number of students from user
     int n = getStudentCount();
