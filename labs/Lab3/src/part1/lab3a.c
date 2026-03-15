@@ -2,8 +2,6 @@
 // Author: Yash Bhatia - bhatiy1 - 400362372
 // Date: 2026-03-15
 
-// Stage 3: Add on the physical addresses translation
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
