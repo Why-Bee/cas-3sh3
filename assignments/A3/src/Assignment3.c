@@ -97,7 +97,7 @@ int init_backing_store() {
     int fd = open(backing_store, O_RDONLY);
 
     if (fd == -1) {
-        perror("Error opening backing store");
+        printf("Error opening backing store file: %s\n", backing_store);
         return 1;
     }
 
@@ -112,7 +112,7 @@ int init_backing_store() {
     close(fd);
 
     if (backing_store_ptr_local == MAP_FAILED) {
-        perror("Error mapping backing store");
+        printf("Error mapping backing store file: %s\n", backing_store);
         return 1;
     }
 
@@ -122,7 +122,7 @@ int init_backing_store() {
 
 int destroy_backing_store() {
     if (munmap(backing_store_ptr, logical_address_space) == -1) {
-        perror("Error unmapping backing store");
+        printf("Error unmapping backing store file: %s\n", backing_store);
         return 1;
     }
     return 0;
