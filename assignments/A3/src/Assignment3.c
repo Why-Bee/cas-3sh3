@@ -9,7 +9,6 @@ Date: [TODAY]
 
 /* TODO:
 Part 1: Port over lab3
-Part 2: Implement TLB
 Part 3: Handle Page Faults
 */
 
@@ -41,13 +40,23 @@ static signed char *backing_store_ptr; // pointer to the backing store
 static signed char physical_memory[physical_memory_size]; // Simulated circular array for physical memory
 static int number_of_addresses = 0;
 static int number_of_page_faults = 0;
+static int number_of_tlb_hits = 0;
+
+// TLB circular array state
+static int tlb_next = 0; // index to fill/overwrite next
+static int tlb_count = 0; // number of entries currently in the TLB
 
 // Function prototypes
 int init_page_table();
+int init_tlb();
 int init_backing_store();
 int destroy_backing_store();
+
 int get_frame_from_tlb(int page_number);
 int in_tlb(int page_number);
+void TLB_Add(int page_number, int frame_number);
+void TLB_Update(int old_page_number, int new_page_number, int frame_number);
+
 int handle_page_table_hit(int page_number);
 int handle_page_fault(int page_number);
 int find_and_invalidate_page(int frame_number);
@@ -71,6 +80,10 @@ int add_page_to_memory(int page_number) {
             printf("DEBUG Error: could not find page to invalidate for frame number %d\n", frame_to_use);
             exit(1);
         }
+        
+        //Update TLB if the invalidated page is in the TLB
+        TLB_Update(status, page_number, frame_to_use);
+
     }
 
     //printf("DEBUG Adding page number %d to frame %d (index %d)\n", page_number, frame_to_use, memory_index);
@@ -89,6 +102,16 @@ int init_page_table() {
     for (int i = 0; i < NUM_PAGES; i++) {
         page_table[i] = -1; // -1 indicates page not in memory
     }
+    return 0;
+}
+
+int init_tlb() {
+    for (int i = 0; i < TLB_SIZE; i++) {
+        tlb[i][0] = -1;
+        tlb[i][1] = -1;
+    }
+    tlb_next = 0;
+    tlb_count = 0;
     return 0;
 }
 
@@ -129,12 +152,55 @@ int destroy_backing_store() {
 }
 
 int get_frame_from_tlb(int page_number) {
+    for (int i = 0; i < tlb_count; i++) {
+        if (tlb[i][0] == page_number) {
+            return tlb[i][1];
+        }
+    }
     return -1;
 }
 
 int in_tlb(int page_number) {
-    return -1; // TODO
+    for (int i = 0; i < tlb_count; i++) {
+        if (tlb[i][0] == page_number) {
+            return 1;
+        }
+    }
+    return 0;
 }
+
+void TLB_Add(int page_number, int frame_number) {
+    // Optional safety: avoid duplicates
+    for (int i = 0; i < tlb_count; i++) {
+        if (tlb[i][0] == page_number) {
+            tlb[i][1] = frame_number;
+            return;
+        }
+    }
+
+    tlb[tlb_next][0] = page_number;
+    tlb[tlb_next][1] = frame_number;
+
+    tlb_next = (tlb_next + 1) % TLB_SIZE;
+
+    if (tlb_count < TLB_SIZE) {
+        tlb_count++;
+    }
+}
+
+void TLB_Update(int old_page, int new_page, int frame_number) {
+    for (int i = 0; i < tlb_count; i++) {
+        if (tlb[i][0] == old_page) {
+            tlb[i][0] = new_page;
+            tlb[i][1] = frame_number;
+            return;
+        }
+    }
+
+    //if old page was not in TLB, just add normally.
+    TLB_Add(new_page, frame_number);
+}
+
 
 int handle_page_table_hit(int page_number) {
     int frame_number = page_table[page_number]; // A page table contains frame numbers indexed by page number
@@ -149,6 +215,10 @@ int handle_page_fault(int page_number) {
 
     // update the page table to indicate that the page is now in memory
     page_table[page_number] = frame_number;
+
+    //new translation should be added to the TLB
+    TLB_Add(page_number, frame_number);
+
     return frame_number;
 }
 
@@ -161,8 +231,6 @@ int find_and_invalidate_page(int frame_number) {
         }
     }
 
-    // also need to invalidate the TLB entry if it exists, TODO
-
     return -1; // should never reach here if the frame number is valid
 }
 
@@ -172,12 +240,16 @@ int convert_to_frame(int page_number) {
     // check TLB first
     if (in_tlb(page_number) == 1) {
         //printf("DEBUG TLB hit for page number %d\n", page_number);
+        number_of_tlb_hits++;
         return get_frame_from_tlb(page_number);
     }
     // if not in TLB, check page table
     if (page_table[page_number] != -1) {
         //printf("DEBUG Page table hit for page number %d\n", page_number);
         frame_number = handle_page_table_hit(page_number);
+
+        //put this translation in the TLB
+        TLB_Add(page_number, frame_number);
     } else {
         //printf("DEBUG Page fault for page number %d\n", page_number);
         frame_number = handle_page_fault(page_number);
@@ -215,7 +287,7 @@ int read_file(const char* filename) {
 
         // Use page number to look up TLB and/or page table
         unsigned int frame_number = -1; // default to not found
-        frame_number = convert_to_frame(page_number); // TODO: implement this function to check TLB
+        frame_number = convert_to_frame(page_number);
         unsigned long long physical_address = ((unsigned long long)frame_number * PAGE_SIZE) + offset;
 
         // Read the value from physical memory
@@ -242,6 +314,11 @@ int main()
     }
     //printf("Page table initialized.\n");
 
+    if (init_tlb() != 0) {
+        destroy_backing_store();
+        return 1;
+    }
+
     if (read_file(address_file) != 0) {
         destroy_backing_store();
         return 1;
@@ -254,7 +331,7 @@ int main()
     // Print statistics
     printf("Total addresses = %d\n", number_of_addresses);
     printf("Page_faults = %d\n", number_of_page_faults);
-    // TODO tlb hits
+    printf("TLB hits = %d\n", number_of_tlb_hits);
 
     return 0;
 }
