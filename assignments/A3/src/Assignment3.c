@@ -4,12 +4,12 @@ Assignment 3: Memory Management in OS
 Author: Yash Bhatia - bhatiy1 - 400362372
 Author: Khawja Labib - labibk - 400356836
 
-Date: [TODAY]
+Date: 21-03-2026
 */
 
-/* TODO:
-Part 1: Port over lab3
-Part 3: Handle Page Faults
+/* Run Instructions:
+- Compile: gcc -o Assignment3 Assignment3.c
+- Run: ./Assignment3
 */
 
 #include <stdio.h>
@@ -22,9 +22,9 @@ Part 3: Handle Page Faults
 #define PAGE_SIZE 256
 #define TLB_SIZE 16
 #define physical_memory_size 32768
-#define NUM_FRAMES (physical_memory_size / PAGE_SIZE)
+#define NUM_FRAMES (physical_memory_size / PAGE_SIZE) // there is 128 frames
 #define logical_address_space 65536
-#define NUM_PAGES (logical_address_space / PAGE_SIZE)
+#define NUM_PAGES (logical_address_space / PAGE_SIZE) // but 256 pages, so not all pages can be in memory at once
 #define OFFSET_BITS 8 // log2(PAGE_SIZE) = 8
 #define OFFSET_MASK ((1 << OFFSET_BITS) - 1)
 
@@ -47,20 +47,25 @@ static int tlb_next = 0; // index to fill/overwrite next
 static int tlb_count = 0; // number of entries currently in the TLB
 
 // Function prototypes
+// Initialization and cleanup functions
 int init_page_table();
 int init_tlb();
 int init_backing_store();
 int destroy_backing_store();
 
+// TLB functions
 int get_frame_from_tlb(int page_number);
 int in_tlb(int page_number);
 void TLB_Add(int page_number, int frame_number);
 void TLB_Update(int old_page_number, int new_page_number, int frame_number);
 
+// Page handling functions
 int handle_page_table_hit(int page_number);
 int handle_page_fault(int page_number);
 int find_and_invalidate_page(int frame_number);
 int convert_to_frame(int page_number);
+
+// File reading function
 int read_file(const char* filename);
 
 
@@ -76,7 +81,7 @@ int add_page_to_memory(int page_number) {
         //printf("DEBUG Page replacement needed for frame number %d\n", frame_to_use);
 
         int status = find_and_invalidate_page(frame_to_use);
-        if (status == -1) {
+        if (status == -1) { // sanity check: should never happen if frame_to_use is valid
             printf("DEBUG Error: could not find page to invalidate for frame number %d\n", frame_to_use);
             exit(1);
         }
@@ -93,19 +98,19 @@ int add_page_to_memory(int page_number) {
     if (loaded_frames < NUM_FRAMES) {
         loaded_frames++;
     }
-    next_frame = (next_frame + 1) % NUM_FRAMES;
+    next_frame = (next_frame + 1) % NUM_FRAMES; // move to the next frame for the next page load (circular)
 
     return frame_to_use;
 }
 
-int init_page_table() {
+int init_page_table() { // initialize page table entries to -1 to indicate not in memory
     for (int i = 0; i < NUM_PAGES; i++) {
         page_table[i] = -1; // -1 indicates page not in memory
     }
     return 0;
 }
 
-int init_tlb() {
+int init_tlb() { // initialize TLB entries to -1 to indicate invalid
     for (int i = 0; i < TLB_SIZE; i++) {
         tlb[i][0] = -1;
         tlb[i][1] = -1;
@@ -139,11 +144,11 @@ int init_backing_store() {
         return 1;
     }
 
-    backing_store_ptr = backing_store_ptr_local;
+    backing_store_ptr = backing_store_ptr_local; // assign to global pointer for use in other functions
     return 0;
 }
 
-int destroy_backing_store() {
+int destroy_backing_store() { // since this is our allocation, need to clean up with munmap
     if (munmap(backing_store_ptr, logical_address_space) == -1) {
         printf("Error unmapping backing store file: %s\n", backing_store);
         return 1;
@@ -151,7 +156,7 @@ int destroy_backing_store() {
     return 0;
 }
 
-int get_frame_from_tlb(int page_number) {
+int get_frame_from_tlb(int page_number) { // search the TLB for the page number and return the corresponding frame number if found
     for (int i = 0; i < tlb_count; i++) {
         if (tlb[i][0] == page_number) {
             return tlb[i][1];
@@ -160,7 +165,7 @@ int get_frame_from_tlb(int page_number) {
     return -1;
 }
 
-int in_tlb(int page_number) {
+int in_tlb(int page_number) { // check if the page number is in the TLB. Can combine this and in_tlb but separated for readability
     for (int i = 0; i < tlb_count; i++) {
         if (tlb[i][0] == page_number) {
             return 1;
@@ -178,16 +183,18 @@ void TLB_Add(int page_number, int frame_number) {
         }
     }
 
+    // Add the new translation to the TLB at the next index, overwriting if necessary
     tlb[tlb_next][0] = page_number;
     tlb[tlb_next][1] = frame_number;
 
-    tlb_next = (tlb_next + 1) % TLB_SIZE;
+    tlb_next = (tlb_next + 1) % TLB_SIZE; // circular increment of the next index
 
     if (tlb_count < TLB_SIZE) {
         tlb_count++;
     }
 }
 
+// This is called when a page is evicted, it needs to update both page table and TLB if the page is in tlb
 void TLB_Update(int old_page, int new_page, int frame_number) {
     for (int i = 0; i < tlb_count; i++) {
         if (tlb[i][0] == old_page) {
@@ -234,6 +241,7 @@ int find_and_invalidate_page(int frame_number) {
     return -1; // should never reach here if the frame number is valid
 }
 
+// this function converts a page number to a frame number by first checking the TLB, then the page table, and handling page faults if necessary. It also updates the TLB and page table as needed.
 int convert_to_frame(int page_number) {
     int frame_number = -1; // default to not found
 
@@ -257,6 +265,7 @@ int convert_to_frame(int page_number) {
     return frame_number;
 }
 
+// main loop that reads the addresses.txt
 int read_file(const char* filename) {
     FILE *file = fopen(filename, "r");
     if (!file) {
@@ -279,7 +288,7 @@ int read_file(const char* filename) {
         // Convert the string to an unsigned long long integer
         unsigned long long logical_address = strtoull(buf, NULL, 10);
 
-        // Compute page number and offset
+        // Compute page number and offset from Lab3a
         unsigned int page_number = logical_address >> OFFSET_BITS;
         unsigned int offset = logical_address & OFFSET_MASK;
 
@@ -288,7 +297,7 @@ int read_file(const char* filename) {
         // Use page number to look up TLB and/or page table
         unsigned int frame_number = -1; // default to not found
         frame_number = convert_to_frame(page_number);
-        unsigned long long physical_address = ((unsigned long long)frame_number * PAGE_SIZE) + offset;
+        unsigned long long physical_address = ((unsigned long long)frame_number * PAGE_SIZE) + offset; // same as (frame_number << OFFSET_BITS) | offset
 
         // Read the value from physical memory
         signed char value = physical_memory[physical_address];
