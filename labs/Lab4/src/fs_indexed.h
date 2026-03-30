@@ -1,5 +1,7 @@
 // Lab 4: File Block Allocation Simulator Header File
 // Implement Indexed Allocation Scheme for a simulated file system
+// bhatiy1 (400362372)
+// Date: 30th March 2026
 
 #ifndef FS_INDEXED_H
 #define FS_INDEXED_H
