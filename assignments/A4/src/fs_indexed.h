@@ -13,6 +13,11 @@
 #define BLOCK_SIZE 1024 // 1kb
 #define TOTAL_BLOCKS 64
 #define MAXIMUM_FILES 10 // up to 10 files can be created in the file system
+// Error codes
+#define ERROR_FILE_EXISTS -1
+#define ERROR_FILE_NOT_FOUND -2
+#define ERROR_INSUFFICIENT_SPACE -3
+#define ERROR_MAX_FILES_REACHED -4
 
 // Structs to represent the file system components
 typedef struct Block
@@ -74,6 +79,9 @@ void listFiles();
 int allocateFreeBlock();
 void returnFreeBlock(Block *block);
 void printFreeBlocks();
+void resetFIB(int i); // helper to reset a FIB entry
+int numberOfFreeBlocks(); // helper to count free blocks in the free block linked list
+int getFileInformationBlockID(); // helper to get an available FIB ID for a new file
 
 //  YASH!  TEST FUNCCTION DELETE BEFORE SUBMISSION
 void testReturnBlockByID(int blockID);
